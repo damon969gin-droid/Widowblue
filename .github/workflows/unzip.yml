@@ -1,0 +1,33 @@
+name: Estrai progetto da zip
+
+"on":
+  push:
+    paths:
+      - "*.zip"
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Estrai e sposta i file alla radice
+        run: |
+          shopt -s dotglob
+          for f in *.zip; do
+            mkdir -p estratto_tmp
+            unzip -oq "$f" -d estratto_tmp
+            mv estratto_tmp/*/* .
+            rm -rf estratto_tmp "$f"
+          done
+
+      - name: Salva il risultato nel repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Estratti i file del progetto dallo zip caricato" || echo "Niente da salvare"
+          git push
