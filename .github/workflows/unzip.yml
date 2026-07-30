@@ -1,9 +1,10 @@
 name: Estrai progetto da zip
 
-"on":
+on:
   push:
     paths:
       - "*.zip"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,22 +13,58 @@ jobs:
   unzip:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Estrai e sposta i file alla radice
+      - name: Mostra contesto e file zip trovati
+        run: |
+          pwd
+          ls -la
+          echo "ZIP files:"
+          ls -la *.zip || echo "Nessun .zip trovato"
+
+      - name: Elenca e testa ZIP (debug)
+        run: |
+          for f in *.zip; do
+            echo "=== $f ==="
+            unzip -l "$f" || echo "impossibile elencare $f"
+            unzip -t "$f" || echo "test fallito per $f"
+          done
+
+      - name: Estrai e sposta i file alla radice (gestisce root o folder unico)
+        shell: bash
         run: |
           shopt -s dotglob
           for f in *.zip; do
+            echo "Estrazione di $f"
+            rm -rf estratto_tmp
             mkdir -p estratto_tmp
             unzip -oq "$f" -d estratto_tmp
-            mv estratto_tmp/*/* .
+            # Se estratto_tmp contiene una sola directory, sposta i suoi contenuti; altrimenti sposta tutto
+            entries=(estratto_tmp/*)
+            if [ "${#entries[@]}" -eq 1 ] && [ -d "${entries[0]}" ]; then
+              echo "Zip contiene una singola cartella, sposto il suo contenuto"
+              mv "${entries[0]}"/* .
+            else
+              echo "Zip contiene file multipli, sposto tutto"
+              mv estratto_tmp/* .
+            fi
             rm -rf estratto_tmp "$f"
-          done
+          done || true
 
-      - name: Salva il risultato nel repository
+      - name: Mostra contenuto dopo estrazione
+        run: ls -la || true
+
+      - name: Commit e push solo se ci sono cambi
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Estratti i file del progetto dallo zip caricato" || echo "Niente da salvare"
-          git push
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da salvare"
+            exit 0
+          fi
+          git commit -m "Estratti i file del progetto dallo zip caricato"
+          git push origin HEAD:${{ github.ref_name }}
