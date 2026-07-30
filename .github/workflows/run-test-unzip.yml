@@ -1,0 +1,97 @@
+name: Test e Esegui Estrazione ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Crea una cartella di test e alcuni file
+        run: |
+          rm -rf tmp_src test.zip
+          mkdir -p tmp_src/sourcedir
+          echo "# Readme di test" > tmp_src/sourcedir/README.md
+          echo "print(\"Hello from test\")" > tmp_src/sourcedir/main.py
+          ls -R tmp_src
+
+      - name: Crea file ZIP di test
+        run: |
+          cd tmp_src
+          zip -r ../test.zip sourcedir
+          cd ..
+          echo "Creato test.zip" && ls -la test.zip
+
+      - name: Rimuovi sorgente originale per simulare solo ZIP
+        run: |
+          rm -rf tmp_src
+          ls -la || true
+
+      - name: Mostra contesto e file zip trovati
+        run: |
+          pwd
+          ls -la
+          echo "ZIP files:"
+          ls -la *.zip || echo "Nessun .zip trovato"
+
+      - name: Elenca e testa ZIP (debug)
+        run: |
+          for f in *.zip; do
+            echo "=== $f ==="
+            unzip -l "$f" || echo "impossibile elencare $f"
+            unzip -t "$f" || echo "test fallito per $f"
+          done
+
+      - name: Estrai e sposta i file alla radice (gestisce root o folder unico)
+        shell: bash
+        run: |
+          shopt -s dotglob
+          for f in *.zip; do
+            echo "Estrazione di $f"
+            rm -rf estratto_tmp
+            mkdir -p estratto_tmp
+            unzip -oq "$f" -d estratto_tmp
+            entries=(estratto_tmp/*)
+            if [ "${#entries[@]}" -eq 1 ] && [ -d "${entries[0]}" ]; then
+              echo "Zip contiene una singola cartella, sposto il suo contenuto"
+              mv "${entries[0]}"/* .
+            else
+              echo "Zip contiene file multipli, sposto tutto"
+              mv estratto_tmp/* .
+            fi
+            rm -rf estratto_tmp "$f"
+          done || true
+
+      - name: Mostra contenuto dopo estrazione
+        run: |
+          ls -la || true
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da salvare"
+            exit 0
+          fi
+          git commit -m "Test: estratti i file dal test.zip"
+
+      - name: Create Pull Request (if changes)
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Test: estratti i file dal test.zip"
+          branch: test-extracted-files-${{ github.run_id }}
+          title: "[Test] Estratti i file dal .zip"
+          body: "Questa PR è stata creata automaticamente dal workflow di test che estrae un .zip di esempio."
+          labels: test,extracted
+          base: main
