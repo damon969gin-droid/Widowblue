@@ -8,7 +8,7 @@ services:
     plan: free
     branch: main
     repo: https://github.com/damon969gin-droid/Widowblue
-    buildCommand: npm install && npm run build
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm ci && npm run build
     startCommand: npm run start -- -p $PORT
     envVars:
       - key: NODE_ENV
