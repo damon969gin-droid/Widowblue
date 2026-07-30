@@ -8,8 +8,9 @@ services:
     plan: free
     branch: main
     repo: https://github.com/damon969gin-droid/Widowblue
-    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && npm run build
-    startCommand: npm run start -- -p $PORT
+    # Forza l'installazione delle devDependencies quando Render usa yarn
+    buildCommand: YARN_PRODUCTION=false yarn install --non-interactive && ls -la node_modules | grep tailwindcss || true && yarn build
+    startCommand: yarn start -- -p $PORT
     envVars:
       - key: NODE_ENV
         value: production
