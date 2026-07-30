@@ -1,0 +1,21 @@
+version: 1
+services:
+  - type: web
+    name: widowblue-web
+    env: node
+    # Scegli la region supportata dal tuo account (es. oregon, frankfurt, ireland...) o rimuovi la riga per usare il default
+    region: oregon
+    plan: free
+    branch: main
+    repo: https://github.com/damon969gin-droid/Widowblue
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -- -p $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WIDOWBLUE_DB_PATH
+        value: /data/widowblue.db
+    disks:
+      - name: widowblue-data
+        mountPath: /data
+        sizeGB: 1
