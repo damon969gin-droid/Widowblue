@@ -57,7 +57,7 @@ jobs:
       - name: Mostra contenuto dopo estrazione
         run: ls -la || true
 
-      - name: Commit e push solo se ci sono cambi
+      - name: Commit se ci sono cambi
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -67,4 +67,14 @@ jobs:
             exit 0
           fi
           git commit -m "Estratti i file del progetto dallo zip caricato"
-          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Crea Pull Request con le modifiche (se presenti)
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Estratti i file del progetto dallo zip caricato"
+          branch: extracted-files-${{ github.run_id }}
+          title: "Estratti i file dal .zip"
+          body: "Questo PR contiene i file estratti dallo zip caricato."
+          labels: extracted
+          base: main
