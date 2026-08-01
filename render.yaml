@@ -3,19 +3,20 @@ services:
   - type: web
     name: widowblue-web
     env: node
-    # Scegli la region supportata dal tuo account (es. oregon, frankfurt, ireland...) o rimuovi la riga per usare il default
+    nodeVersion: "22.11.0"
     region: oregon
     plan: free
     branch: main
     repo: https://github.com/damon969gin-droid/Widowblue
-    # Use npm install with dev deps included to avoid requiring a lockfile during build
-    buildCommand: NPM_CONFIG_PRODUCTION=false npm install --include=dev && ls -la node_modules | grep tailwindcss || true && npm run build
+    buildCommand: npm install && npm run build
     startCommand: npm run start -- -p $PORT
     envVars:
       - key: NODE_ENV
         value: production
       - key: WIDOWBLUE_DB_PATH
         value: /data/widowblue.db
+      - key: WIDOWBLUE_JWT_SECRET
+        sync: false
     disks:
       - name: widowblue-data
         mountPath: /data
