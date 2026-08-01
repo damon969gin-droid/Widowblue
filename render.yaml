@@ -4,7 +4,7 @@ services:
     name: widowblue-web
     env: node
     nodeVersion: "22.11.0"
-    region: oregon
+    region: frankfurt
     plan: free
     branch: main
     repo: https://github.com/damon969gin-droid/Widowblue
@@ -14,10 +14,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: WIDOWBLUE_DB_PATH
-        value: /data/widowblue.db
+        value: /tmp/widowblue.db
       - key: WIDOWBLUE_JWT_SECRET
         sync: false
-    disks:
-      - name: widowblue-data
-        mountPath: /data
-        sizeGB: 1
+# Not using a persistent disk on the free plan; remove "disks" section to avoid confusion
