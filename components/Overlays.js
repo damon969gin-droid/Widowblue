@@ -2,6 +2,12 @@
 import { COLORS, BACKGROUNDS, CHAT_FONTS } from "../lib/theme";
 import { X, Check, Globe, Bot, Paperclip, Mic, Smile } from "lucide-react";
 
+const EMOJI_LIST = [
+  "😀","😁","😂","🤣","😅","😊","😉","😍","😘","😜",
+  "🤗","🤔","🙃","😎","😭","😡","👍","👎","🙏","👏",
+  "🔥","✨","🎉","🤝","💡","📎","📸","🎧","🚀","🌐",
+];
+
 export function BgPicker({ current, onPick, onClose, currentFont, onPickFont }) {
   return (
     <div className="absolute flex items-end" style={{ inset: 0, background: "#00000099", zIndex: 30 }} onClick={onClose}>
@@ -53,11 +59,33 @@ const MODAL_CONTENT = {
   ai: { icon: Bot, title: "Collega un'AI", body: "Collega l'assistente AI che preferisci alla conversazione, per riassumere, tradurre o rispondere al posto tuo." },
   attach: { icon: Paperclip, title: "Allega file", body: "Allega foto, video, audio e documenti dal dispositivo o dallo spazio cloud collegato." },
   mic: { icon: Mic, title: "Messaggio vocale", body: "Tieni premuto per registrare un vocale, come su WhatsApp — rilasciando lo invii, scorrendo lo annulli." },
-  emoji: { icon: Smile, title: "Emoji, sticker e GIF", body: "Libreria di emoji, sticker e GIF, con la possibilità di aggiungere pacchetti extra dalle impostazioni." },
+  // emoji modal handled specially
 };
 
-export function InfoModal({ type, onClose }) {
+export function InfoModal({ type, onClose, onPick }) {
   const content = MODAL_CONTENT[type];
+  if (type === "emoji") {
+    return (
+      <div className="absolute flex items-center justify-center" style={{ inset: 0, background: "#00000099", zIndex: 30, padding: 24 }} onClick={onClose}>
+        <div style={{ width: "100%", borderRadius: 18, padding: 12, background: COLORS.panel }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <p className="text-sm font-semibold">Emoji</p>
+            <button onClick={onClose} style={{ border: "none", background: "none" }}>
+              <X size={18} color={COLORS.textMuted} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 8 }}>
+            {EMOJI_LIST.map((e) => (
+              <button key={e} onClick={() => onPick && onPick(e)} style={{ padding: 8, borderRadius: 8, border: 'none', background: COLORS.panel2, fontSize: 18 }}>
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!content) return null;
   const Icon = content.icon;
   return (
     <div className="absolute flex items-center justify-center" style={{ inset: 0, background: "#00000099", zIndex: 30, padding: 24 }} onClick={onClose}>
