@@ -82,6 +82,7 @@ export default function WidowBlueApp() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (authToken) window.localStorage.setItem(TOKEN_STORAGE_KEY, authToken);
+    else window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   }, [authToken]);
 
   // Contatti e ricompensa reali, appena autenticati e online.
@@ -196,6 +197,18 @@ export default function WidowBlueApp() {
     }, 1100);
   }
 
+  // --- aggiunta logout ---
+  function handleLogout() {
+    setAuthToken(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+    setLoginEmail("");
+    setLoginPassword("");
+    setLoginPhone("");
+    setScreen("login");
+  }
+
   const contact = displayContacts.find((c) => c.id === activeChat);
 
   return (
@@ -206,7 +219,7 @@ export default function WidowBlueApp() {
         className="relative w-full max-w-sm border overflow-hidden shadow-2xl"
         style={{ background: COLORS.panel, borderColor: COLORS.border, height: 800, borderRadius: 40 }}
       >
-        <div className="absolute" style={{ top: 0, left: "50%", transform: "translateX(-50%)", width: 120, height: 22, background: "#000", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, zIndex: 20 }} />
+        <div className="absolute" style={{ top: 0, left: "50%", transform: "translateX(-50%)", width: 120, height: 22, background: "#000", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, opacity: 0.06 }} />
 
         <div className="h-full flex flex-col wb-body" style={{ color: COLORS.textPrimary }}>
           {screen === "splash" && <SplashScreen onContinue={() => setScreen("login")} />}
@@ -239,6 +252,7 @@ export default function WidowBlueApp() {
               onOpenChat={openChat}
               onOpenVpn={() => setScreen("vpn")}
               onOpenProfile={() => setScreen("profile")}
+              onLogout={handleLogout}
               steps={steps}
               stepGoal={stepGoal}
               earnedEuro={earnedEuro}
@@ -260,6 +274,7 @@ export default function WidowBlueApp() {
               setDraft={setDraft}
               onSend={sendMessage}
               onBack={() => setScreen("home")}
+              onHome={() => setScreen("home")}
               onOpenModal={setModal}
               bgTheme={bgTheme}
               onOpenBgPicker={() => setShowBgPicker(true)}
@@ -268,11 +283,12 @@ export default function WidowBlueApp() {
             />
           )}
           {screen === "vpn" && (
-            <VpnScreen onBack={() => setScreen("home")} active={vpnActive} onToggle={() => setVpnActive((v) => !v)} provider={vpnProvider} setProvider={setVpnProvider} />
+            <VpnScreen onBack={() => setScreen("home")} onHome={() => setScreen("home")} active={vpnActive} onToggle={() => setVpnActive((v) => !v)} provider={vpnProvider} setProvider={setVpnProvider} />
           )}
           {screen === "profile" && (
             <ProfileScreen
               onBack={() => setScreen("home")}
+              onHome={() => setScreen("home")}
               portfolioUrl={portfolioUrl}
               setPortfolioUrl={setPortfolioUrl}
               portfolioPublic={portfolioPublic}
@@ -284,7 +300,7 @@ export default function WidowBlueApp() {
         {showBgPicker && (
           <BgPicker current={bgTheme} onPick={(id) => setBgTheme(id)} onClose={() => setShowBgPicker(false)} currentFont={chatFont} onPickFont={(id) => setChatFont(id)} />
         )}
-        {modal && <InfoModal type={modal} onClose={() => setModal(null)} />}
+        {modal && <InfoModal type={modal} onClose={() => setModal(null)} onPick={(emoji) => { setDraft((d) => d + emoji); setModal(null); }} />}
       </div>
     </div>
   );
