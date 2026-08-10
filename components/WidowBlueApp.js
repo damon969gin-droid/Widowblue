@@ -12,6 +12,7 @@ import {
   apiSendMessage,
   apiSubmitSteps,
   openMessageStream,
+  apiAddContacts,
 } from "../lib/apiClient";
 import { SplashScreen, LoginScreen, SecurityScreen } from "./OnboardingScreens";
 import { HomeScreen } from "./HomeScreen";
@@ -42,6 +43,9 @@ export default function WidowBlueApp() {
   const [portfolioUrl, setPortfolioUrl] = useState("");
   const [portfolioPublic, setPortfolioPublic] = useState(false);
   const scrollRef = useRef(null);
+
+  // webview overlay state
+  const [webviewUrl, setWebviewUrl] = useState(null);
 
   // --- Integrazione backend reale, con fallback grazioso alla demo ---
   const [backendOnline, setBackendOnline] = useState(null); // null = verifica in corso
@@ -209,6 +213,65 @@ export default function WidowBlueApp() {
     setScreen("login");
   }
 
+  // --- import contacts ---
+  async function handleImportContacts() {
+    if (!isConnected) {
+      alert('Importare contatti richiede di essere autenticati');
+      return;
+    }
+
+    // Try Web Contacts API
+    try {
+      if (typeof navigator !== 'undefined' && navigator.contacts && navigator.contacts.select) {
+        const props = ['name', 'tel', 'email'];
+        const opts = { multiple: true };
+        const picked = await navigator.contacts.select(props, opts);
+        const contacts = picked.map((c, i) => ({
+          name: Array.isArray(c.name) ? c.name[0] : (c.name || 'Sconosciuto'),
+          phone: Array.isArray(c.tel) ? c.tel[0] : (c.tel || ''),
+          email: Array.isArray(c.email) ? c.email[0] : (c.email || ''),
+          initials: Array.isArray(c.name) && c.name[0] ? c.name[0].split(' ').map(s => s[0]).slice(0,2).join('') : '??',
+          color: '#7C3AED'
+        }));
+        const res = await apiAddContacts(authToken, contacts);
+        if (res.ok) {
+          setRealContacts((prev) => [...(prev || []), ...res.data]);
+          alert('Contatti importati con successo');
+        } else {
+          alert('Errore import contatti: ' + (res.error || 'unknown'));
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Contacts API error', e);
+    }
+
+    // fallback CSV prompt
+    const csv = prompt('Il tuo browser non supporta l\'import diretto. Incolla qui un CSV con colonne name,email,phone');
+    if (csv) {
+      const lines = csv.split('\n').map(l => l.trim()).filter(Boolean);
+      const parsed = lines.map((ln, idx) => {
+        const [name, email, phone] = ln.split(',');
+        return { name: name?.trim(), email: email?.trim(), phone: phone?.trim(), initials: name?.split(' ').map(s=>s[0]).slice(0,2).join(''), color: '#60A5FA' };
+      });
+      const res2 = await apiAddContacts(authToken, parsed);
+      if (res2.ok) {
+        setRealContacts((prev) => [...(prev || []), ...res2.data]);
+        alert('Contatti importati via CSV');
+      } else alert('Errore import CSV: ' + (res2.error || ''));
+    }
+  }
+
+  // --- open url (in-app or external) ---
+  function handleOpenUrl(url, mode = 'external') {
+    const safeUrl = url && url.startsWith('http') ? url : `https://${url}`;
+    if (mode === 'external') {
+      window.open(safeUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      setWebviewUrl(safeUrl);
+    }
+  }
+
   const contact = displayContacts.find((c) => c.id === activeChat);
 
   return (
@@ -253,6 +316,7 @@ export default function WidowBlueApp() {
               onOpenVpn={() => setScreen("vpn")}
               onOpenProfile={() => setScreen("profile")}
               onLogout={handleLogout}
+              onImportContacts={handleImportContacts}
               steps={steps}
               stepGoal={stepGoal}
               earnedEuro={earnedEuro}
@@ -274,8 +338,8 @@ export default function WidowBlueApp() {
               setDraft={setDraft}
               onSend={sendMessage}
               onBack={() => setScreen("home")}
-              onHome={() => setScreen("home")}
               onOpenModal={setModal}
+              onOpenUrl={handleOpenUrl}
               bgTheme={bgTheme}
               onOpenBgPicker={() => setShowBgPicker(true)}
               scrollRef={scrollRef}
@@ -301,6 +365,17 @@ export default function WidowBlueApp() {
           <BgPicker current={bgTheme} onPick={(id) => setBgTheme(id)} onClose={() => setShowBgPicker(false)} currentFont={chatFont} onPickFont={(id) => setChatFont(id)} />
         )}
         {modal && <InfoModal type={modal} onClose={() => setModal(null)} onPick={(emoji) => { setDraft((d) => d + emoji); setModal(null); }} />}
+
+        {webviewUrl && (
+          <div className="absolute" style={{ inset: 0, background: '#000000cc', zIndex: 40 }} onClick={() => setWebviewUrl(null)}>
+            <div style={{ width: '100%', height: '100%', padding: 20 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                <button onClick={() => setWebviewUrl(null)} style={{ padding: 8, borderRadius: 8, background: 'white', border: 'none' }}>Chiudi</button>
+              </div>
+              <iframe src={webviewUrl} style={{ width: '100%', height: 'calc(100% - 48px)', border: 'none', borderRadius: 12 }} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
