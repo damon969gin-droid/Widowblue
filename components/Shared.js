@@ -1,6 +1,7 @@
 "use client";
 import { COLORS } from "../lib/theme";
-import { Bluetooth, CheckCheck } from "lucide-react";
+import { Bluetooth, CheckCheck, Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 
 export function WebMesh({ size = 260, opacity = 0.5 }) {
   const nodes = [
@@ -52,18 +53,25 @@ export function Logo({ size = 28 }) {
   );
 }
 
-export function FieldInput({ icon: Icon, placeholder, value, onChange, type = "text" }) {
+export function FieldInput({ icon: Icon, placeholder, value, onChange, type = "text", passwordToggle = false }) {
+  const [show, setShow] = useState(false);
+  const isPassword = type === "password" && passwordToggle;
   return (
     <div className="flex items-center" style={{ gap: 10, padding: "12px 14px", borderRadius: 14, background: COLORS.panel2, border: `1px solid ${COLORS.border}` }}>
       <Icon size={16} color={COLORS.textMuted} />
       <input
-        type={type}
+        type={isPassword ? (show ? "text" : "password") : type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="flex-1 text-sm"
         style={{ background: "transparent", outline: "none", border: "none", color: COLORS.textPrimary }}
       />
+      {isPassword && (
+        <button onClick={() => setShow((s) => !s)} style={{ border: "none", background: "none", padding: 6 }} className="active:opacity-70">
+          {show ? <EyeOff size={16} color={COLORS.textMuted} /> : <Eye size={16} color={COLORS.textMuted} />}
+        </button>
+      )}
     </div>
   );
 }
