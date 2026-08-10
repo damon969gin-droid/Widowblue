@@ -36,7 +36,7 @@ export function LoginScreen({ email, setEmail, password, setPassword, phone, set
       <p className="text-xs" style={{ color: COLORS.textMuted, marginTop: 10, marginBottom: 24 }}>Accedi o crea un account</p>
       <div className="flex flex-col" style={{ gap: 12 }}>
         <FieldInput icon={Mail} placeholder="Email" value={email} onChange={setEmail} type="email" />
-        <FieldInput icon={Lock} placeholder="Password" value={password} onChange={setPassword} type="password" />
+        <FieldInput icon={Lock} placeholder="Password" value={password} onChange={setPassword} type="password" passwordToggle />
         <FieldInput icon={Phone} placeholder="Numero di telefono" value={phone} onChange={setPhone} type="tel" />
       </div>
       {error && (
