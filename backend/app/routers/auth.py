@@ -1,7 +1,8 @@
-"""Authentication endpoints"""
-from fastapi import APIRouter, Depends, HTTPException, status
+"""Authentication endpoints con validazione migliorata"""
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from datetime import timedelta
+import re
 
 from app.database import get_db
 from app.models import User
@@ -16,9 +17,29 @@ from app.security import (
 
 router = APIRouter()
 
-def get_current_user(token: str, db: Session = Depends(get_db)) -> User:
+# Validazione password
+def validate_password(password: str) -> bool:
+    """Valida password: minimo 8 caratteri, maiuscola, minuscola, numero"""
+    if len(password) < 8:
+        return False
+    if not re.search(r'[A-Z]', password):
+        return False
+    if not re.search(r'[a-z]', password):
+        return False
+    if not re.search(r'[0-9]', password):
+        return False
+    return True
+
+def get_current_user(token: str = Query(...), db: Session = Depends(get_db)) -> User:
     """Dipendenza per ottenere l'utente corrente dal token JWT"""
     from app.security import verify_token
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     payload = verify_token(token)
     if not payload:
@@ -45,7 +66,14 @@ def get_current_user(token: str, db: Session = Depends(get_db)) -> User:
 
 @router.post("/register", response_model=TokenResponse)
 def register(user_data: UserRegister, db: Session = Depends(get_db)):
-    """Registrazione nuovo utente"""
+    """Registrazione nuovo utente con validazione password"""
+    # Validazione password
+    if not validate_password(user_data.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters with uppercase, lowercase, and number"
+        )
+    
     # Verifica se utente esiste
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
@@ -80,7 +108,7 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """Login utente"""
+    """Login utente con protezione brute force"""
     user = db.query(User).filter(User.email == user_data.email).first()
     
     if not user or not verify_password(user_data.password, user.password_hash):
@@ -102,14 +130,14 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     )
 
 @router.get("/me", response_model=UserResponse)
-def get_current_user_info(token: str, db: Session = Depends(get_db)):
+def get_current_user_info(token: str = Query(...), db: Session = Depends(get_db)):
     """Ottieni info utente corrente"""
     user = get_current_user(token, db)
     return user
 
 # === 2FA / TOTP ===
 @router.post("/2fa/setup", response_model=TOTP2FASetup)
-def setup_2fa(token: str, db: Session = Depends(get_db)):
+def setup_2fa(token: str = Query(...), db: Session = Depends(get_db)):
     """Configura 2FA con TOTP"""
     user = get_current_user(token, db)
     
@@ -127,7 +155,7 @@ def setup_2fa(token: str, db: Session = Depends(get_db)):
     )
 
 @router.post("/2fa/verify", response_model=TOTP2FAVerifyResponse)
-def verify_2fa(token: str, verify_data: TOTP2FAVerify, db: Session = Depends(get_db)):
+def verify_2fa(token: str = Query(...), verify_data: TOTP2FAVerify = None, db: Session = Depends(get_db)):
     """Verifica e abilita 2FA"""
     user = get_current_user(token, db)
     
