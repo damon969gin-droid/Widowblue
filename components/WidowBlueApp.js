@@ -26,7 +26,7 @@ const TOKEN_STORAGE_KEY = "widowblue_token";
 export default function WidowBlueApp() {
   const [screen, setScreen] = useState("splash");
   const [activeChat, setActiveChat] = useState(null);
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState({});
   const [draft, setDraft] = useState("");
   const [network, setNetwork] = useState("mesh");
   const [bgTheme, setBgTheme] = useState("default");
@@ -44,11 +44,8 @@ export default function WidowBlueApp() {
   const [portfolioPublic, setPortfolioPublic] = useState(false);
   const scrollRef = useRef(null);
 
-  // webview overlay state
-  const [webviewUrl, setWebviewUrl] = useState(null);
-
-  // --- Integrazione backend reale, con fallback grazioso alla demo ---
-  const [backendOnline, setBackendOnline] = useState(null); // null = verifica in corso
+  // Backend reale - OBBLIGATORIO
+  const [backendOnline, setBackendOnline] = useState(null);
   const [authToken, setAuthToken] = useState(null);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -62,21 +59,26 @@ export default function WidowBlueApp() {
   const stepGoal = 7000;
   const maxEuro = 20;
   const mockEarnedEuro = Math.min(maxEuro, Number((maxEuro * (steps / stepGoal)).toFixed(2)));
-  const earnedEuro = realReward ? realReward.wbluAwarded : mockEarnedEuro;
+  const earnedEuro = realReward ? realReward.wblu_amount : 0;
 
-  const displayContacts = realContacts || CONTACTS;
+  const displayContacts = realContacts || [];
   const isConnected = backendOnline && !!authToken;
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, activeChat, screen]);
 
-  // Controllo di stato del backend, una volta all'avvio.
+  // Verifica backend al caricamento
   useEffect(() => {
-    checkHealth().then(setBackendOnline);
+    checkHealth().then((isOnline) => {
+      setBackendOnline(isOnline);
+      if (!isOnline) {
+        setLoginError("Backend non disponibile. Riprova fra poco.");
+      }
+    });
   }, []);
 
-  // Ripristina la sessione se c'e' un token salvato da una visita precedente.
+  // Ripristina sessione se c'è un token salvato
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -89,7 +91,7 @@ export default function WidowBlueApp() {
     else window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   }, [authToken]);
 
-  // Contatti e ricompensa reali, appena autenticati e online.
+  // Carica contatti e ricompense quando autenticato
   useEffect(() => {
     if (!isConnected) return;
     apiGetContacts(authToken).then((res) => {
@@ -98,9 +100,9 @@ export default function WidowBlueApp() {
     apiSubmitSteps(authToken, steps).then((res) => {
       if (res.ok) setRealReward(res.data);
     });
-  }, [isConnected]);
+  }, [isConnected, authToken, steps]);
 
-  // Storico messaggi + iscrizione allo stream in tempo reale della chat aperta.
+  // Storico messaggi + stream realtime
   useEffect(() => {
     if (!activeChat || !isConnected) return;
     let alive = true;
@@ -123,8 +125,7 @@ export default function WidowBlueApp() {
       alive = false;
       closeStream();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChat, isConnected]);
+  }, [activeChat, isConnected, authToken]);
 
   async function toggleSecurity(id) {
     const alreadyOn = selectedSecurity.includes(id);
@@ -138,20 +139,27 @@ export default function WidowBlueApp() {
         setTotpStatus("idle");
       } else {
         setTotpStatus("error");
+        setLoginError("Errore setup 2FA");
       }
     }
   }
 
   async function handleVerifyTotp() {
     const res = await apiVerify2FA(authToken, totpCode);
-    setTotpStatus(res.ok ? "verified" : "error");
+    if (res.ok) {
+      setTotpStatus("verified");
+      setLoginError("");
+    } else {
+      setTotpStatus("error");
+      setLoginError("Codice 2FA non valido");
+    }
   }
 
   async function handleLoginSubmit() {
     setLoginError("");
 
     if (!backendOnline) {
-      setScreen("security"); // modalita' demo: nessun backend, si prosegue comunque
+      setLoginError("Backend non disponibile. Riprova fra poco.");
       return;
     }
 
@@ -160,13 +168,11 @@ export default function WidowBlueApp() {
     setLoginLoading(false);
 
     if (res.ok) {
-      setAuthToken(res.data.token);
+      setAuthToken(res.data.access_token);
       setScreen("security");
-    } else if (res.offline) {
-      setBackendOnline(false);
-      setScreen("security");
-    } else if (res.data?.requires2fa) {
-      setLoginError("Questo account ha il 2FA attivo: funzione di login con codice non ancora nella demo — usa un altro account per provare il flusso.");
+      setLoginEmail("");
+      setLoginPassword("");
+      setLoginPhone("");
     } else {
       setLoginError(res.error || "Credenziali non valide");
     }
@@ -183,25 +189,16 @@ export default function WidowBlueApp() {
     setDraft("");
 
     if (isConnected) {
-      await apiSendMessage(authToken, activeChat, text);
-      return; // arriva in UI da solo via lo stream SSE
+      const res = await apiSendMessage(authToken, activeChat, text);
+      if (!res.ok) {
+        setLoginError("Errore invio messaggio");
+      }
+      return;
     }
 
-    // Modalita' demo (offline o non autenticato): stesso comportamento del prototipo originale.
-    const id = Date.now();
-    const time = new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
-    setMessages((prev) => ({ ...prev, [activeChat]: [...(prev[activeChat] || []), { id, from: "me", text, time }] }));
-    const replies = AUTO_REPLIES[activeChat] || ["👍"];
-    const reply = replies[Math.floor(Math.random() * replies.length)];
-    setTimeout(() => {
-      setMessages((prev) => ({
-        ...prev,
-        [activeChat]: [...(prev[activeChat] || []), { id: id + 1, from: "them", text: reply, time: new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) }],
-      }));
-    }, 1100);
+    setLoginError("Non sei connesso al backend");
   }
 
-  // --- aggiunta logout ---
   function handleLogout() {
     setAuthToken(null);
     if (typeof window !== "undefined") {
@@ -211,64 +208,76 @@ export default function WidowBlueApp() {
     setLoginPassword("");
     setLoginPhone("");
     setScreen("login");
+    setRealContacts(null);
+    setMessages({});
   }
 
-  // --- import contacts ---
   async function handleImportContacts() {
     if (!isConnected) {
-      alert('Importare contatti richiede di essere autenticati');
+      setLoginError("Devi essere autenticato per importare contatti");
       return;
     }
 
-    // Try Web Contacts API
     try {
-      if (typeof navigator !== 'undefined' && navigator.contacts && navigator.contacts.select) {
-        const props = ['name', 'tel', 'email'];
+      if (typeof navigator !== "undefined" && navigator.contacts && navigator.contacts.select) {
+        const props = ["name", "tel", "email"];
         const opts = { multiple: true };
         const picked = await navigator.contacts.select(props, opts);
-        const contacts = picked.map((c, i) => ({
-          name: Array.isArray(c.name) ? c.name[0] : (c.name || 'Sconosciuto'),
-          phone: Array.isArray(c.tel) ? c.tel[0] : (c.tel || ''),
-          email: Array.isArray(c.email) ? c.email[0] : (c.email || ''),
-          initials: Array.isArray(c.name) && c.name[0] ? c.name[0].split(' ').map(s => s[0]).slice(0,2).join('') : '??',
-          color: '#7C3AED'
+        const contacts = picked.map((c) => ({
+          name: Array.isArray(c.name) ? c.name[0] : c.name || "Sconosciuto",
+          phone: Array.isArray(c.tel) ? c.tel[0] : c.tel || "",
+          email: Array.isArray(c.email) ? c.email[0] : c.email || "",
+          initials: Array.isArray(c.name) && c.name[0]
+            ? c.name[0]
+                .split(" ")
+                .map((s) => s[0])
+                .slice(0, 2)
+                .join("")
+            : "??",
+          color: "#7C3AED",
+          is_group: false,
         }));
         const res = await apiAddContacts(authToken, contacts);
         if (res.ok) {
           setRealContacts((prev) => [...(prev || []), ...res.data]);
-          alert('Contatti importati con successo');
+          setLoginError("");
         } else {
-          alert('Errore import contatti: ' + (res.error || 'unknown'));
+          setLoginError("Errore import contatti");
         }
         return;
       }
     } catch (e) {
-      console.warn('Contacts API error', e);
+      console.warn("Contacts API error", e);
     }
 
-    // fallback CSV prompt
-    const csv = prompt('Il tuo browser non supporta l\'import diretto. Incolla qui un CSV con colonne name,email,phone');
+    const csv = prompt("Incolla CSV con colonne: name,email,phone");
     if (csv) {
-      const lines = csv.split('\n').map(l => l.trim()).filter(Boolean);
-      const parsed = lines.map((ln, idx) => {
-        const [name, email, phone] = ln.split(',');
-        return { name: name?.trim(), email: email?.trim(), phone: phone?.trim(), initials: name?.split(' ').map(s=>s[0]).slice(0,2).join(''), color: '#60A5FA' };
+      const lines = csv.split("\n").map((l) => l.trim()).filter(Boolean);
+      const parsed = lines.map((ln) => {
+        const [name, email, phone] = ln.split(",");
+        return {
+          name: name?.trim(),
+          email: email?.trim(),
+          phone: phone?.trim(),
+          initials: name?.split(" ").map((s) => s[0]).slice(0, 2).join(""),
+          color: "#60A5FA",
+          is_group: false,
+        };
       });
       const res2 = await apiAddContacts(authToken, parsed);
       if (res2.ok) {
         setRealContacts((prev) => [...(prev || []), ...res2.data]);
-        alert('Contatti importati via CSV');
-      } else alert('Errore import CSV: ' + (res2.error || ''));
+        setLoginError("");
+      } else {
+        setLoginError("Errore import CSV");
+      }
     }
   }
 
-  // --- open url (in-app or external) ---
-  function handleOpenUrl(url, mode = 'external') {
-    const safeUrl = url && url.startsWith('http') ? url : `https://${url}`;
-    if (mode === 'external') {
-      window.open(safeUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      setWebviewUrl(safeUrl);
+  function handleOpenUrl(url, mode = "external") {
+    const safeUrl = url && url.startsWith("http") ? url : `https://${url}`;
+    if (mode === "external") {
+      window.open(safeUrl, "_blank", "noopener,noreferrer");
     }
   }
 
@@ -282,15 +291,18 @@ export default function WidowBlueApp() {
         className="relative w-full max-w-sm border overflow-hidden shadow-2xl"
         style={{ background: COLORS.panel, borderColor: COLORS.border, height: 800, borderRadius: 40 }}
       >
-        <div className="absolute" style={{ top: 0, left: "50%", transform: "translateX(-50%)", width: 120, height: 22, background: "#000", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, opacity: 0.06 }} />
+        <div className="absolute" style={{ top: 0, left: "50%", transform: "translateX(-50%)", width: 120, height: 22, background: "#000", borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }} />
 
         <div className="h-full flex flex-col wb-body" style={{ color: COLORS.textPrimary }}>
           {screen === "splash" && <SplashScreen onContinue={() => setScreen("login")} />}
           {screen === "login" && (
             <LoginScreen
-              email={loginEmail} setEmail={setLoginEmail}
-              password={loginPassword} setPassword={setLoginPassword}
-              phone={loginPhone} setPhone={setLoginPhone}
+              email={loginEmail}
+              setEmail={setLoginEmail}
+              password={loginPassword}
+              setPassword={setLoginPassword}
+              phone={loginPhone}
+              setPhone={setLoginPhone}
               onSubmit={handleLoginSubmit}
               loading={loginLoading}
               error={loginError}
@@ -327,7 +339,7 @@ export default function WidowBlueApp() {
               setNetwork={setNetwork}
               messages={messages}
               contactsOverride={displayContacts}
-              connectionStatus={backendOnline === null ? "checking" : isConnected ? "online" : "demo"}
+              connectionStatus={backendOnline === null ? "checking" : isConnected ? "online" : "offline"}
             />
           )}
           {screen === "chat" && contact && (
@@ -346,36 +358,12 @@ export default function WidowBlueApp() {
               chatFont={chatFont}
             />
           )}
-          {screen === "vpn" && (
-            <VpnScreen onBack={() => setScreen("home")} onHome={() => setScreen("home")} active={vpnActive} onToggle={() => setVpnActive((v) => !v)} provider={vpnProvider} setProvider={setVpnProvider} />
-          )}
-          {screen === "profile" && (
-            <ProfileScreen
-              onBack={() => setScreen("home")}
-              onHome={() => setScreen("home")}
-              portfolioUrl={portfolioUrl}
-              setPortfolioUrl={setPortfolioUrl}
-              portfolioPublic={portfolioPublic}
-              setPortfolioPublic={setPortfolioPublic}
-            />
-          )}
+          {screen === "vpn" && <VpnScreen onBack={() => setScreen("home")} onHome={() => setScreen("home")} active={vpnActive} onToggle={() => setVpnActive((v) => !v)} provider={vpnProvider} setProvider={setVpnProvider} />}
+          {screen === "profile" && <ProfileScreen onBack={() => setScreen("home")} onHome={() => setScreen("home")} portfolioUrl={portfolioUrl} setPortfolioUrl={setPortfolioUrl} portfolioPublic={portfolioPublic} setPortfolioPublic={setPortfolioPublic} />}
         </div>
 
-        {showBgPicker && (
-          <BgPicker current={bgTheme} onPick={(id) => setBgTheme(id)} onClose={() => setShowBgPicker(false)} currentFont={chatFont} onPickFont={(id) => setChatFont(id)} />
-        )}
+        {showBgPicker && <BgPicker current={bgTheme} onPick={(id) => setBgTheme(id)} onClose={() => setShowBgPicker(false)} currentFont={chatFont} onPickFont={(id) => setChatFont(id)} />}
         {modal && <InfoModal type={modal} onClose={() => setModal(null)} onPick={(emoji) => { setDraft((d) => d + emoji); setModal(null); }} />}
-
-        {webviewUrl && (
-          <div className="absolute" style={{ inset: 0, background: '#000000cc', zIndex: 40 }} onClick={() => setWebviewUrl(null)}>
-            <div style={{ width: '100%', height: '100%', padding: 20 }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-                <button onClick={() => setWebviewUrl(null)} style={{ padding: 8, borderRadius: 8, background: 'white', border: 'none' }}>Chiudi</button>
-              </div>
-              <iframe src={webviewUrl} style={{ width: '100%', height: 'calc(100% - 48px)', border: 'none', borderRadius: 12 }} />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
