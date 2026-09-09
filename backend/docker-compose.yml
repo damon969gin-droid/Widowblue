@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: widowblue-db
+    environment:
+      POSTGRES_USER: widowblue
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: widowblue_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - widowblue-network
+
+  api:
+    build: .
+    container_name: widowblue-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - DATABASE_URL=postgresql://widowblue:password@postgres:5432/widowblue_db
+      - SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]
+      - DEBUG=True
+      - ENVIRONMENT=development
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+    networks:
+      - widowblue-network
+
+volumes:
+  postgres_data:
+
+networks:
+  widowblue-network:
+    driver: bridge
