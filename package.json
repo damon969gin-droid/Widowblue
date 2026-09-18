@@ -23,3 +23,11 @@
     "@supabase/supabase-js": "^2.30.0"
   }
 }
+"scripts": {
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "next lint",
+  "pages:build": "npx @cloudflare/next-on-pages",
+  "pages:deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static --project-name=widowblue"
+}
