@@ -30,4 +30,5 @@
   "lint": "next lint",
   "pages:build": "npx @cloudflare/next-on-pages",
   "pages:deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static --project-name=widowblue"
-}
+}"pages:build": "npx @cloudflare/next-on-pages",
+"pages:deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static --project-name=widowblue"
